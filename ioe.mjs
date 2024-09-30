@@ -20,7 +20,12 @@ export class IoExpander {
     static PIN_MODE_PWM = 0b00101; // PWM, output, push-pull mode
     static PIN_MODE_ADC = 0b01010; // ADC, input-only (high-impedance)
 
+    // Wind vane
     static PIN_WINDVANE = 8     // P0.3 ANE6
+
+    // Anemometer
+    static PIN_ANE1 = 5;
+    static PIN_ANE2 = 6;
 
     /* IO Expander pins
      * Pin |  ADC   |  PWM   |  ENC  |
@@ -56,7 +61,7 @@ export class IoExpander {
         {port: 1, pin: 7, adcChannel: 0, encChannel: 14}
     ];
 
-    static windDirectionToDegrees = {
+    static WIND_DIR_TO_DEGREES = {
         0.9: 0,
         2.0: 45,
         3.0: 90,
@@ -73,6 +78,8 @@ export class IoExpander {
     static REGS_P = [ioeregs.REG_P0, ioeregs.REG_P1, ioeregs.REG_P2, ioeregs.REG_P3];
     static REGS_PS = [ioeregs.REG_P0, ioeregs.REG_P1, ioeregs.REG_P2, ioeregs.REG_P3];
 
+    static REGS_INT_MASK_P = [ioeregs.REG_INT_MASK_P0, ioeregs.REG_INT_MASK_P1, -1, ioeregs.REG_INT_MASK_P3];
+
     constructor({i2c_addr, interrupt_timeout=1.0, interrupt_pin=null, interrupt_pull_up=false, gpio=null,
         smbus_id=1, skip_chip_id_check=false, perform_reset=false}) {
         
@@ -87,6 +94,7 @@ export class IoExpander {
         this.gpio = gpio;
         this.encoderOffset = [0, 0, 0, 0];
         this.encoderLast = [0, 0, 0, 0];
+
     }
 
     getChipId() {
@@ -132,17 +140,49 @@ export class IoExpander {
         });
     }
 
-    setBits(reg, bits) {
+    clrBits(reg, bits, mask = null) {
+        if (ioeregs.BIT_ADDRESSED_REGS.includes(reg)) {
+            return this.setBits(reg, bits & 0b111, 0b0111);
+        } else {
+            if (mask === null) {
+                mask = bits;
+                bits = 0;
+            }    
+            return this.setBits(reg, bits, mask);
+        }
+    }
+
+    setBits(reg, bits, mask = null) {
         return new Promise((resolve, reject) => {
-            if (reg in ioeregs.BIT_ADDRESSED_REGS) {
-                return reject('Reserved register');
+            if (ioeregs.BIT_ADDRESSED_REGS.includes(reg)) {
+                debugger;
+                if (mask === null) {
+                    mask = 0b1000;
+                }
+                for (let bit = 0; bit < 8; bit++) {
+                    if (bits & (1 << bit)) {
+                        this.i2cBus.writeByteSync(this.i2cAddress, reg, (0b1000 & mask) | (bit & 0b111));
+                    }
+                }
+                //reject('Reserved register');
+                resolve();
             } else {
+                if (mask === null) {
+                    mask = bits;
+                }        
                 this.i2cBus.readByte(this.i2cAddress, reg, (err, res) => {
                     if(err) {
                         return reject(err);
                     } else {
-                        this.i2cBus.writeByte(this.i2cAddress, reg, res | bits, (err) => {
-                            return reject(err);
+                        bits &= 0xff;
+                        mask &= 0xff;
+
+                        // Only apply bits indicated by mask
+                        const clearedInput = res & (~mask);
+                        const bitsToApply = bits & mask;
+
+                        this.i2cBus.writeByte(this.i2cAddress, reg, clearedInput | bitsToApply, (err) => {
+                            reject(err);
                         });
                         resolve();
                     }
@@ -160,12 +200,8 @@ export class IoExpander {
             throw new Error("Pin number not in the range 1-14");
         return IoExpander.PINS[pin - 1];
     }
-
-    getPinRegs() {
-
-    }
     
-    setMode(pin, mode, schmittTrigger=false, invert=false) {
+    setMode(pin, mode, schmittTrigger = false, invert = false) {
         debugger;
         let gpioMode = mode & 0b11;
         let ioMode = (mode >> 2) & 0b11;
@@ -190,11 +226,25 @@ export class IoExpander {
         this.i2cBus.writeByteSync(this.i2cAddress, IoExpander.REGS_M1[ioPin.port], pm1);
         this.i2cBus.writeByteSync(this.i2cAddress, IoExpander.REGS_M2[ioPin.port], pm2);
 
+        // Setup Schmitt trigger
+        if ([IoExpander.PIN_MODE_PU, IoExpander.PIN_MODE_IN].includes(mode)) {
+            if(schmittTrigger) {
+                this.setBits(IoExpander.REGS_PS[ioPin.port], 1 << ioPin.pin);
+            } else {
+                this.clrBits(IoExpander.REGS_PS[ioPin.port], 1 << ioPin.pin);
+            }
+        }
+
+        // Invert pin if it is a basic output
+        if (mode === IoExpander.PIN_MODE_PP && invert) {
+            ioPin.inverted = 1;
+        }
+
         this.i2cBus.writeByteSync(this.i2cAddress, IoExpander.REGS_P[ioPin.port], (initialState << 3) | ioPin.pin);
     }
 
     enableAdc() {
-        this.setBits(ioeregs.REG_ADCCON1, 0b1);
+        this.setBits(ioeregs.REG_ADCCON1, 0b1, 0b1);
     }
 
     adcInput(pin, adcTimeout = 1) {
@@ -234,7 +284,77 @@ export class IoExpander {
             checkADCReady();
             const buffer = Buffer.alloc(2);
             this.i2cBus.readI2cBlockSync(this.i2cAddress, ioeregs.REG_ADCRL, 2, buffer);
-            return buffer[1] << 4 | buffer[0];
+            return ((buffer[1] << 4 | buffer[0]) / 4095.0) * this.vref;
+        }
+    }
+
+    output(pin, value, load = true, waitForLoad = true) {
+        let ioPin = this.getPin(pin);
+
+        return new Promise((resolve) => {
+            if (ioPin.mode === IoExpander.PIN_MODE_PWM) {
+                reject(new Error('PWM code TODO'));
+            } else {
+                if(value === 1) {
+                    this.setBits(IoExpander.REGS_P[ioPin.port], 1 << ioPin.pin);
+                } else {
+                    this.clrBits(IoExpander.REGS_P[ioPin.port], 1 << ioPin.pin);
+                }
+                resolve();
+            }
+        });
+    }
+
+    setPinInterrupt(pin, enabled = true) {
+        const ioPin = this.getPin(pin);
+        if(enabled) {
+            this.setBits(IoExpander.REGS_INT_MASK_P[ioPin.port], 1 << ioPin.pin);
+        } else {
+            this.clrBits(IoExpander.REGS_INT_MASK_P[ioPin.port], 1 << ioPin.pin);
+        }
+    }
+
+    setupSwitchCounter(pin, mode = IoExpander.PIN_MODE_PU) {
+        const ioPin = this.getPin(pin);
+        if (![0, 1].includes(ioPin.port)) {
+            throw new Error(`Pin ${pin} does not support switch counting`);
+        }
+        if (![IoExpander.PIN_MODE_IN, IoExpander.PIN_MODE_PU].includes(mode)) {
+            throw new Error(`Pin mode should be one of PIN_MODE_IN or PIN_MODE_PU`);
+        }
+
+        this.setMode(pin, mode, true);
+
+        if(ioPin.port === 0) {
+            this.setBits(ioeregs.REG_SWITCH_EN_P0, 1 << ioPin.pin);
+        } else {
+            this.setBits(ioeregs.REG_SWITCH_EN_P1, 1 << ioPin.pin);
+        }
+    }
+
+    readSwitchCounter(pin) {
+        const ioPin = this.getPin(pin);
+
+        if (![0,1].includes(ioPin.port)) {
+            throw new Error(`Pin ${pin} does not support switch counting`);
+        }
+
+        let value = 0;
+        if(ioPin.port === 0) {
+            value = this.i2cBus.readByteSync(this.i2cAddress, ioeregs.REG_SWITCH_P00);
+        } else {
+            value = this.i2cBus.readByteSync(this.i2cAddress, ioeregs.REG_SWITCH_P10);
+        }
+        this.setBits(ioeregs.REG_INT, 1 << ioeregs.BIT_INT_TRIGD);
+        return value & 0x7f;
+    }
+
+    enableInterruptOut(pinSwap = false) {
+        this.setBits(ioeregs.REG_INT, 1 << ioeregs.BIT_INT_OUT_EN);
+        if(pinSwap) {
+            this.clrBits(ioeregs.REG_INT, 1 << ioeregs.BIT_INT_PIN_SWAP);
+        } else {
+            this.setBits(ioeregs.REG_INT, 1 << ioeregs.BIT_INT_PIN_SWAP);
         }
     }
 }
