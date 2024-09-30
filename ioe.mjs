@@ -27,6 +27,12 @@ export class IoExpander {
     static PIN_ANE1 = 5;
     static PIN_ANE2 = 6;
 
+    // Rain sensor
+    static PIN_R2 = 3;         // P1.2
+    static PIN_R3 = 7;         // P1.1
+    static PIN_R4 = 2;         // P1.0
+    static PIN_R5 = 1;         // P1.5
+
     /* IO Expander pins
      * Pin |  ADC   |  PWM   |  ENC  |
      * 1   |        | [CH 5] | CH 1  |
@@ -76,7 +82,7 @@ export class IoExpander {
     static REGS_M2 = [ioeregs.REG_P0M2, ioeregs.REG_P1M2, -1, ioeregs.REG_P3M2];
 
     static REGS_P = [ioeregs.REG_P0, ioeregs.REG_P1, ioeregs.REG_P2, ioeregs.REG_P3];
-    static REGS_PS = [ioeregs.REG_P0, ioeregs.REG_P1, ioeregs.REG_P2, ioeregs.REG_P3];
+    static REGS_PS = [ioeregs.REG_P0S, ioeregs.REG_P1S, ioeregs.REG_P2S, ioeregs.REG_P3S];
 
     static REGS_INT_MASK_P = [ioeregs.REG_INT_MASK_P0, ioeregs.REG_INT_MASK_P1, -1, ioeregs.REG_INT_MASK_P3];
 
