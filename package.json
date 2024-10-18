@@ -1,8 +1,11 @@
 {
   "name": "@bezuidenhout/pimoroni-weatherhat",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A Node.js module for reading wind and rain data from the Pimoroni weatherhat.",
   "main": "weather.js",
+  "exports": {
+    ".": "./*.js"
+  },
   "keywords": [
     "rain",
     "wind",

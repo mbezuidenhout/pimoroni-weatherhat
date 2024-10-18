@@ -1,7 +1,7 @@
 'use strict';
 
-import { IoExpander } from './ioe.mjs';
-import fs from 'node:fs';
+const IoExpander = require('./ioe.js');
+const fs = require('node:fs');
 
 //const ioe = new IoExpander({i2c_addr: 0x12});
 
@@ -13,7 +13,7 @@ const RAIN_MM_PER_TICK = 0.2794;
 
 const HISTORY_FILE = 'data.json';
 
-export class WindVane {
+class WindVane {
   constructor({ioe, pin = IoExpander.PIN_WINDVANE}) {
     this.ioe = ioe;
     ioe.setMode(pin, IoExpander.PIN_MODE_ADC);
@@ -36,7 +36,7 @@ export class WindVane {
   }
 }
 
-export class WindSpeed {
+class WindSpeed {
   constructor({ioe, pin = IoExpander.PIN_ANE1, switchCounterPin = IoExpander.PIN_ANE2}) {
     this.ioe = ioe;
     ioe.setMode(pin, IoExpander.PIN_MODE_PP);
@@ -152,7 +152,7 @@ export class WindSpeed {
   }
 }
 
-export class Rain {
+class Rain {
   constructor({ioe, switchCounterPin = IoExpander.PIN_R4}) {
     this.ioe = ioe;
     this.tStart = new Date();
@@ -280,3 +280,9 @@ export class Rain {
     return this.rainToday * RAIN_MM_PER_TICK;
   }
 }
+
+module.exports = {
+  WindSpeed,
+  WindVane,
+  Rain
+};

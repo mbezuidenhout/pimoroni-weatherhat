@@ -8,10 +8,10 @@
 
 'use strict';
 
-import * as ioeregs from './ioe-regs.mjs';
-import i2c from 'i2c-bus';
+const ioeregs = require('./ioe-regs.js');
+const i2c = require('i2c-bus');
 
-export class IoExpander {
+class IoExpander {
     static PIN_MODE_IO  = 0b00000; // General IO mode
     static PIN_MODE_PP  = 0b00001; // Output, Push-Pull mode
     static PIN_MODE_IN  = 0b00010; // Input-only (high-impedance)
@@ -371,3 +371,5 @@ export class IoExpander {
         }
     }
 }
+
+module.exports = IoExpander;
