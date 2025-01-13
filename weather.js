@@ -11,7 +11,7 @@ const ANE_FACTOR = 2.18;  // Anemometer factor
 
 const RAIN_MM_PER_TICK = 0.2794;
 
-const HISTORY_FILE = 'data.json';
+const HISTORY_FILE = 'rain.json';
 
 class WindVane {
   constructor({ioe, pin = IoExpander.PIN_WINDVANE}) {
@@ -153,11 +153,26 @@ class WindSpeed {
 }
 
 class Rain {
-  constructor({ioe, switchCounterPin = IoExpander.PIN_R4}) {
+
+  /**
+   * Class constructor
+   * 
+   * @constructor
+   * @param {IoExpander} ioe
+   * @param {integer} switchCounterPin
+   * @param {string} dataPath - Location of persistent data.
+   */
+  constructor({ioe, switchCounterPin = IoExpander.PIN_R4, dataPath}) {
     this.ioe = ioe;
     this.tStart = new Date();
 
-    fs.readFile(HISTORY_FILE, 'utf8', (err, data) => {
+    if(dataPath === undefined) {
+      dataPath = process.cwd();
+    }
+
+    this.dataPath = dataPath;
+
+    fs.readFile(this.dataPath + HISTORY_FILE, 'utf8', (err, data) => {
       if(err) {
         if (err.code === 'ENOENT') {
           console.error("data.json not found. No rainfall history.");
@@ -196,6 +211,8 @@ class Rain {
     this.rainByHour = new Array(49).fill(null); // 1 entry for every 30 minutes + 1 entry
     this.rainByHourIndex = 0;
 
+    this.isDirty = false;
+
     setInterval(() => {
       let rainCounter = this.ioe.readSwitchCounter(IoExpander.PIN_R4);
 
@@ -206,7 +223,10 @@ class Rain {
       } else {
         this.rainCounterTotal += rainCounter - this.lastRainCounter;
       }
-      this.lastRainCounter = rainCounter;
+      if (rainCounter != this.lastRainCounter) {
+        this.isDirty = true;
+        this.lastRainCounter = rainCounter;
+      }
       rainPerSecond = this.rainCounterTotal - rainPerSecond;
       this.rain[this.rainIndex] = rainPerSecond;
 
@@ -227,6 +247,13 @@ class Rain {
     }, 1000);
 
     setInterval(() => {
+      if(this.isDirty) {
+        this.saveRainfall();
+        this.isDirty = false;
+      }
+    }, 60000); // Write dirty data to disk every minute
+
+    setInterval(() => {
       this.rainByHourIndex++;
       if(this.rainByHourIndex >= this.rainByHour.length) {
         this.rainByHourIndex = 0;
@@ -236,18 +263,22 @@ class Rain {
     process.on('exit', (code) => {
         console.log(`Process is exiting with code: ${code}`);
         // Perform any cleanup or final actions here
-        try {
-          const data = JSON.stringify({rainTotal: this.rainCounterTotal, rainToday: this.rainToday, rainYesterDay: this.rainYesterday});
-          fs.writeFileSync(HISTORY_FILE, data, 'utf8');
-        } catch (err) {
-          console.error('Error writing file:', err);
-        }
+        this.saveRainfall();
     });
     
     process.on('SIGINT', () => {
         // Perform cleanup or actions here before the program is forcefully stopped
         process.exit();
     });
+  }
+
+  saveRainfall() {
+    try {
+      const data = JSON.stringify({rainTotal: this.rainCounterTotal, rainToday: this.rainToday, rainYesterDay: this.rainYesterday});
+      fs.writeFileSync(this.dataPath + HISTORY_FILE, data, {encoding: 'utf8'});
+    } catch (err) {
+      console.error('Error writing file:', err);
+    }
   }
 
   // Return mm for last minute
