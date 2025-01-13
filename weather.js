@@ -37,8 +37,17 @@ class WindVane {
 }
 
 class WindSpeed {
-  constructor({ioe, pin = IoExpander.PIN_ANE1, switchCounterPin = IoExpander.PIN_ANE2}) {
+  static UNIT = [
+    "m/s",
+    "km/h",
+    "kn",
+    "mph",
+    "ft/s",
+  ];
+
+  constructor({ioe, pin = IoExpander.PIN_ANE1, switchCounterPin = IoExpander.PIN_ANE2, unit = WindSpeed.UNIT[0]}) {
     this.ioe = ioe;
+    this.unit = unit;
     ioe.setMode(pin, IoExpander.PIN_MODE_PP);
     ioe.setupSwitchCounter(switchCounterPin);
     
@@ -162,8 +171,13 @@ class Rain {
    * @param {integer} switchCounterPin
    * @param {string} dataPath - Location of persistent data.
    */
-  constructor({ioe, switchCounterPin = IoExpander.PIN_R4, dataPath}) {
+  static UNIT = [
+    "mm",
+    "inch",
+  ];
+  constructor({ioe, switchCounterPin = IoExpander.PIN_R4, dataPath, unit = Rain.UNIT[0]}) {
     this.ioe = ioe;
+    this.unit = unit;
     this.tStart = new Date();
 
     if(dataPath === undefined) {
