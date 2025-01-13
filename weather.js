@@ -37,8 +37,17 @@ class WindVane {
 }
 
 class WindSpeed {
-  constructor({ioe, pin = IoExpander.PIN_ANE1, switchCounterPin = IoExpander.PIN_ANE2}) {
+  static UNIT = [
+    "m/s",
+    "km/h",
+    "kn",
+    "mph",
+    "ft/s",
+  ];
+
+  constructor({ioe, pin = IoExpander.PIN_ANE1, switchCounterPin = IoExpander.PIN_ANE2, unit = WindSpeed.UNIT[0]}) {
     this.ioe = ioe;
+    this.unit = unit;
     ioe.setMode(pin, IoExpander.PIN_MODE_PP);
     ioe.setupSwitchCounter(switchCounterPin);
     
@@ -153,8 +162,13 @@ class WindSpeed {
 }
 
 class Rain {
-  constructor({ioe, switchCounterPin = IoExpander.PIN_R4}) {
+  static UNIT = [
+    "mm",
+    "inch",
+  ];
+  constructor({ioe, switchCounterPin = IoExpander.PIN_R4, unit = Rain.UNIT[0]}) {
     this.ioe = ioe;
+    this.unit = unit;
     this.tStart = new Date();
 
     fs.readFile(HISTORY_FILE, 'utf8', (err, data) => {
@@ -238,7 +252,7 @@ class Rain {
         // Perform any cleanup or final actions here
         try {
           const data = JSON.stringify({rainTotal: this.rainCounterTotal, rainToday: this.rainToday, rainYesterDay: this.rainYesterday});
-          fs.writeFileSync(HISTORY_FILE, data, 'utf8');
+          fs.writeFileSync(HISTORY_FILE, data, {encoding: 'utf8'});
         } catch (err) {
           console.error('Error writing file:', err);
         }
