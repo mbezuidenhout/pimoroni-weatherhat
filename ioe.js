@@ -370,6 +370,10 @@ class IoExpander {
             this.setBits(ioeregs.REG_INT, 1 << ioeregs.BIT_INT_PIN_SWAP);
         }
     }
+
+    close() {
+        this.i2cBus.closeSync();
+    }
 }
 
 module.exports = IoExpander;

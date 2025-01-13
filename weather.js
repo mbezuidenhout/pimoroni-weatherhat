@@ -163,6 +163,11 @@ class WindSpeed {
 
 class Rain {
 
+  static UNIT = [
+    "mm",
+    "inch",
+  ];
+
   /**
    * Class constructor
    * 
@@ -171,10 +176,6 @@ class Rain {
    * @param {integer} switchCounterPin
    * @param {string} dataPath - Location of persistent data.
    */
-  static UNIT = [
-    "mm",
-    "inch",
-  ];
   constructor({ioe, switchCounterPin = IoExpander.PIN_R4, dataPath, unit = Rain.UNIT[0]}) {
     this.ioe = ioe;
     this.unit = unit;
@@ -183,15 +184,30 @@ class Rain {
     if(dataPath === undefined) {
       dataPath = process.cwd();
     }
+    dataPath = dataPath.endsWith('/') ? dataPath : dataPath + "/";
 
     this.dataPath = dataPath;
 
-    fs.readFile(this.dataPath + HISTORY_FILE, 'utf8', (err, data) => {
+    this.rainCounterTotal = 0;
+    this.lastRainCounter = 0;
+
+    this.rain = new Array(60).fill(null); // Keep track of rain counter every second for one minute
+    this.rainIndex = 0; // Index of next rain array entry
+
+    this.rainToday = 0;
+    this.rainYesterday = 0;
+
+    this.rainByHour = new Array(49).fill(null); // 1 entry for every 30 minutes + 1 entry
+    this.rainByHourIndex = 0;
+
+    this.isDirty = false;
+
+    fs.readFile(this.dataPath + HISTORY_FILE, { encoding: "utf8" }, (err, data) => {
       if(err) {
         if (err.code === 'ENOENT') {
-          console.error("data.json not found. No rainfall history.");
+          console.error(this.dataPath + HISTORY_FILE + " not found. No rainfall history.");
         } else {
-          console.error("An error occurred trying to open data.json. No rainfall history.", err);
+          console.error("An error occurred trying to open " + this.dataPath + HISTORY_FILE + ". No rainfall history.", err);
         }
       } else {
         try {
@@ -212,20 +228,6 @@ class Rain {
       .then(() => {
         ioe.setPinInterrupt(IoExpander.PIN_R4);
       });
-
-    this.rainCounterTotal = 0;
-    this.lastRainCounter = 0;
-
-    this.rain = new Array(60).fill(null); // Keep track of rain counter every second for one minute
-    this.rainIndex = 0; // Index of next rain array entry
-
-    this.rainToday = 0;
-    this.rainYesterday = 0;
-
-    this.rainByHour = new Array(49).fill(null); // 1 entry for every 30 minutes + 1 entry
-    this.rainByHourIndex = 0;
-
-    this.isDirty = false;
 
     setInterval(() => {
       let rainCounter = this.ioe.readSwitchCounter(IoExpander.PIN_R4);
@@ -277,7 +279,11 @@ class Rain {
     process.on('exit', (code) => {
         console.log(`Process is exiting with code: ${code}`);
         // Perform any cleanup or final actions here
-        this.saveRainfall();
+        try {
+          this.saveRainfall();
+        } catch (err) {
+          console.error('Error writing file:', err);
+        }
     });
     
     process.on('SIGINT', () => {
