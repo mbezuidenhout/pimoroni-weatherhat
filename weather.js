@@ -88,7 +88,7 @@ class WindVane {
   }
 }
 
-iclass WindSpeed {
+class WindSpeed {
     static UNIT = ['m/s', 'km/h', 'kn', 'mph', 'ft/s'];
 
     static SAMPLE_INTERVAL_MS = 1000;
