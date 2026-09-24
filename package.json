@@ -1,6 +1,6 @@
 {
   "name": "@bezuidenhout/pimoroni-weatherhat",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A Node.js module for reading wind and rain data from the Pimoroni weatherhat.",
   "main": "weather.js",
   "keywords": [
@@ -23,7 +23,7 @@
     "example": "examples"
   },
   "scripts": {
-    "test": "node --check ioe.js && node --check weather.js && node --check examples/example.js && node tests/test-i2c.js && node tests/test-windvane.js"
+    "test": "node --check ioe.js && node --check weather.js && node --check examples/example.js && node tests/test-i2c.js && node tests/test-windvane.js && node tests/test-windspeed.js"
   },
   "repository": {
     "type": "git",
