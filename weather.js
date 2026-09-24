@@ -363,7 +363,9 @@ class WindSpeed {
 }
 
 class Rain {
-  static UNIT = ['mm', 'inch'];
+  static UNIT = ['mm', 'in'];
+
+  static COUNTER_MAX = 128;
 
   constructor({
     ioe,
@@ -374,6 +376,13 @@ class Rain {
     this.ioe = ioe;
     this.switchCounterPin = switchCounterPin;
     this.unit = unit;
+
+    if (!Rain.UNIT.includes(unit)) {
+      throw new RangeError(
+        `Invalid rainfall unit "${unit}". ` +
+        `Expected one of: ${Rain.UNIT.join(', ')}`
+      );
+    }
 
     this.tStart = new Date();
 
@@ -403,6 +412,11 @@ class Rain {
       recursive: true
     });
 
+    /*
+     * All rainfall values are stored internally as raw
+     * tipping-bucket counts. Unit conversion is performed
+     * only when a rainfall value is requested.
+     */
     this.rainCounterTotal = 0;
     this.lastRainCounter = 0;
 
@@ -526,7 +540,8 @@ class Rain {
 
         if (rainCounter < this.lastRainCounter) {
           this.rainCounterTotal +=
-            128 - this.lastRainCounter;
+            Rain.COUNTER_MAX -
+            this.lastRainCounter;
 
           this.rainCounterTotal +=
             rainCounter;
@@ -565,9 +580,17 @@ class Rain {
 
         const now = new Date();
 
+        /*
+         * Detect a change of calendar date rather than a
+         * change in day-of-week.
+         */
         if (
-          this.tStart.getDay() !==
-          now.getDay()
+          this.tStart.getFullYear() !==
+            now.getFullYear() ||
+          this.tStart.getMonth() !==
+            now.getMonth() ||
+          this.tStart.getDate() !==
+            now.getDate()
         ) {
           this.tStart = now;
 
@@ -602,8 +625,36 @@ class Rain {
     }, 1800000);
   }
 
+  /*
+   * Convert a raw tipping-bucket count to the configured
+   * rainfall unit.
+   *
+   * The Weather HAT rain gauge records 0.2794 mm for each
+   * bucket tip.
+   */
+  #convert(ticks) {
+    const rainfall =
+      ticks * RAIN_MM_PER_TICK;
+
+    switch (this.unit) {
+      case 'mm':
+        return rainfall;
+
+      case 'in':
+        return rainfall / 25.4;
+
+      default:
+        return rainfall;
+    }
+  }
+
   saveRainfall() {
     try {
+      /*
+       * Store raw tipping-bucket counts rather than converted
+       * rainfall values. This keeps the history file independent
+       * of the selected display unit.
+       */
       const data = JSON.stringify({
         rainTotal:
           this.rainCounterTotal,
@@ -629,20 +680,19 @@ class Rain {
   }
 
   getRainfall() {
-    return (
+    const rainfall =
       this.rain.reduce(
         (sum, value) =>
           sum + (value ?? 0),
         0
-      ) *
-      RAIN_MM_PER_TICK
-    );
+      );
+
+    return this.#convert(rainfall);
   }
 
   getRainfallTotal() {
-    return (
-      this.rainCounterTotal *
-      RAIN_MM_PER_TICK
+    return this.#convert(
+      this.rainCounterTotal
     );
   }
 
@@ -667,23 +717,18 @@ class Rain {
         prevIndex
       ] ?? 0;
 
-    return (
-      rainfall *
-      RAIN_MM_PER_TICK
-    );
+    return this.#convert(rainfall);
   }
 
   getRainfallYesterday() {
-    return (
-      this.rainYesterday *
-      RAIN_MM_PER_TICK
+    return this.#convert(
+      this.rainYesterday
     );
   }
 
   getRainfallToday() {
-    return (
-      this.rainToday *
-      RAIN_MM_PER_TICK
+    return this.#convert(
+      this.rainToday
     );
   }
 }
